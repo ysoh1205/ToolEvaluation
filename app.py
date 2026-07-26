@@ -286,7 +286,7 @@ edited_frame = st.data_editor(
     height=min(800, 42 + max(1, len(rows)) * 35),
     column_order=[
         "tool_name",
-        "tool_endpoint",
+        "tool_description",
         "openapi_operation",
         "actions",
         "resource_access",
@@ -295,8 +295,11 @@ edited_frame = st.data_editor(
         "tool_name": st.column_config.TextColumn(
             "Tool", help="tools.json의 tool 이름", disabled=True, width="medium"
         ),
-        "tool_endpoint": st.column_config.TextColumn(
-            "Tool endpoint", disabled=True, width="medium"
+        "tool_description": st.column_config.TextColumn(
+            "Description",
+            help="tools.json의 tool 설명",
+            disabled=True,
+            width="large",
         ),
         "openapi_operation": st.column_config.SelectboxColumn(
             "OpenAPI operation",

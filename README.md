@@ -6,7 +6,7 @@
 ## 기능
 
 - 서버 이름 + `tools.json` + `openapi.json` 입력
-- operationId 또는 HTTP method/path 기반 자동 매핑 초안
+- tool `name`/`description`과 OpenAPI `operationId`/`summary` 기반 자동 매핑 초안
 - tool별 OpenAPI operation 직접 선택 및 의도적 미매핑
 - `Read` / `Write` / `Modify` 복수 선택
 - `Private` / `Open-public` / `target-access` 선택

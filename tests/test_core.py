@@ -18,14 +18,19 @@ from mapper.core import (
 TOOLS = [
     {
         "name": "get-widget",
-        "method": "get",
-        "pathTemplate": "/v1/widgets/{widget_id}",
-        "operationId": "get-widget",
+        "description": "Get widget",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"widget_id": {"type": "string"}},
+        },
     },
     {
         "name": "search-widgets",
-        "method": "post",
-        "pathTemplate": "/v1/widgets/search",
+        "description": "Search widgets",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+        },
     },
 ]
 
@@ -60,6 +65,60 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(rows[0]["actions"], ["Read"])
         self.assertEqual(rows[1]["actions"], ["Read"])
         self.assertEqual(rows[0]["resource_access"], "Private")
+        self.assertEqual(rows[0]["tool_description"], "Get widget")
+
+    def test_generic_three_key_tool_uses_no_extended_fields(self) -> None:
+        generic_tools = [
+            {
+                "name": "createWidget",
+                "description": "Create a widget",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"title": {"type": "string"}},
+                },
+            }
+        ]
+        generic_openapi = {
+            "openapi": "3.1.0",
+            "paths": {
+                "/v1/widgets": {
+                    "post": {
+                        "operationId": "create-widget",
+                        "summary": "Create a widget",
+                    }
+                }
+            },
+        }
+        parsed_tools = parse_tools_json(json.dumps(generic_tools))
+        operations = extract_operations(generic_openapi)
+        rows = build_mapping_rows(parsed_tools, operations)
+
+        self.assertNotEqual(rows[0]["openapi_operation"], UNMAPPED)
+        self.assertEqual(rows[0]["actions"], ["Write"])
+        configuration = build_configuration(
+            "generic", parsed_tools, generic_openapi, operations, rows
+        )
+        self.assertEqual(
+            configuration["mappings"][0]["tool_description"], "Create a widget"
+        )
+
+    def test_unmapped_three_key_tool_infers_action_from_name(self) -> None:
+        generic_tools = [
+            {
+                "name": "find_documents",
+                "description": "Find matching documents",
+                "inputSchema": {"type": "object", "properties": {}},
+            }
+        ]
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(generic_tools, operations)
+
+        self.assertEqual(rows[0]["openapi_operation"], UNMAPPED)
+        self.assertEqual(rows[0]["actions"], ["Read"])
+
+    def test_requires_common_tool_keys(self) -> None:
+        with self.assertRaises(DocumentValidationError):
+            parse_tools_json(json.dumps([{"name": "incomplete"}]))
 
     def test_configuration_keeps_unmapped_operation(self) -> None:
         operations = extract_operations(OPENAPI)
@@ -101,4 +160,3 @@ class CoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

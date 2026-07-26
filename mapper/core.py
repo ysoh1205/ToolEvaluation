@@ -38,9 +38,20 @@ def parse_tools_json(raw: bytes | str) -> list[dict[str, Any]]:
     for index, tool in enumerate(tools, start=1):
         if not isinstance(tool, dict):
             raise DocumentValidationError(f"tools.json의 {index}번째 항목이 객체가 아닙니다.")
-        name = str(tool.get("name") or tool.get("operationId") or "").strip()
-        if not name:
+        name = tool.get("name")
+        description = tool.get("description")
+        input_schema = tool.get("inputSchema")
+        if not isinstance(name, str) or not name.strip():
             raise DocumentValidationError(f"tools.json의 {index}번째 항목에 name이 없습니다.")
+        name = name.strip()
+        if not isinstance(description, str):
+            raise DocumentValidationError(
+                f"{name}: description은 문자열이어야 합니다."
+            )
+        if not isinstance(input_schema, dict):
+            raise DocumentValidationError(
+                f"{name}: inputSchema는 객체여야 합니다."
+            )
         if name in seen_names:
             raise DocumentValidationError(f"중복된 tool 이름이 있습니다: {name}")
         seen_names.add(name)
@@ -91,65 +102,112 @@ def _canonical(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
+def _tokens(*values: Any) -> set[str]:
+    words: set[str] = set()
+    for value in values:
+        separated = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(value or ""))
+        words.update(re.findall(r"[a-z0-9]+", separated.lower()))
+    return words
+
+
 def default_operation_for_tool(
     tool: dict[str, Any], operations: list[dict[str, str]]
 ) -> str:
-    candidates = [
-        str(tool.get("operationId") or "").strip(),
-        str(tool.get("name") or "").strip(),
+    name = tool["name"].strip()
+    description = tool["description"].strip()
+
+    exact_name = [op for op in operations if op["operation_id"] == name]
+    if len(exact_name) == 1:
+        return exact_name[0]["key"]
+
+    canonical_name = _canonical(name)
+    normalized_name = [
+        op for op in operations if _canonical(op["operation_id"]) == canonical_name
     ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        exact = [op for op in operations if op["operation_id"] == candidate]
-        if len(exact) == 1:
-            return exact[0]["key"]
+    if len(normalized_name) == 1:
+        return normalized_name[0]["key"]
 
-    method = str(tool.get("method") or "").upper()
-    path = str(tool.get("pathTemplate") or tool.get("path") or "")
-    endpoint_matches = [
-        op for op in operations if op["method"] == method and op["path"] == path
-    ]
-    if len(endpoint_matches) == 1:
-        return endpoint_matches[0]["key"]
+    if description:
+        canonical_description = _canonical(description)
+        description_matches = [
+            op
+            for op in operations
+            if op["summary"]
+            and _canonical(op["summary"]) == canonical_description
+        ]
+        if len(description_matches) == 1:
+            return description_matches[0]["key"]
 
-    canonical_candidates = {_canonical(value) for value in candidates if value}
-    fuzzy = [
-        op for op in operations if _canonical(op["operation_id"]) in canonical_candidates
-    ]
-    return fuzzy[0]["key"] if len(fuzzy) == 1 else UNMAPPED
+    return UNMAPPED
 
 
-def default_actions(tool: dict[str, Any]) -> list[str]:
-    method = str(tool.get("method") or "").upper()
-    name = _canonical(tool.get("name") or tool.get("operationId"))
+def default_actions(
+    tool: dict[str, Any], operation: dict[str, str] | None
+) -> list[str]:
+    method = operation["method"] if operation else ""
+    signal_tokens = _tokens(
+        tool["name"],
+        tool["description"],
+        operation["operation_id"] if operation else "",
+        operation["summary"] if operation else "",
+    )
+    read_hints = {
+        "fetch",
+        "find",
+        "get",
+        "list",
+        "lookup",
+        "query",
+        "read",
+        "retrieve",
+        "search",
+    }
+    write_hints = {"add", "create", "insert", "publish", "send", "upload"}
+    modify_hints = {
+        "archive",
+        "delete",
+        "modify",
+        "move",
+        "patch",
+        "remove",
+        "restore",
+        "set",
+        "update",
+    }
 
     if method in {"GET", "HEAD", "OPTIONS"}:
         return ["Read"]
-    if method == "POST" and any(
-        hint in name for hint in ("search", "query", "retrieve", "list", "get")
-    ):
+    if method == "POST" and signal_tokens & read_hints:
         return ["Read"]
     if method == "POST":
         return ["Write"]
     if method in {"PUT", "PATCH", "DELETE"}:
         return ["Modify"]
-    return []
+
+    inferred: list[str] = []
+    if signal_tokens & read_hints:
+        inferred.append("Read")
+    if signal_tokens & write_hints:
+        inferred.append("Write")
+    if signal_tokens & modify_hints:
+        inferred.append("Modify")
+    return inferred
 
 
 def build_mapping_rows(
     tools: list[dict[str, Any]], operations: list[dict[str, str]]
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    operations_by_key = {operation["key"]: operation for operation in operations}
     for tool in tools:
-        method = str(tool.get("method") or "").upper()
-        path = str(tool.get("pathTemplate") or tool.get("path") or "")
+        selected_key = default_operation_for_tool(tool, operations)
+        selected_operation = operations_by_key.get(selected_key)
         rows.append(
             {
-                "tool_name": str(tool.get("name") or tool.get("operationId")),
-                "tool_endpoint": f"{method} {path}".strip(),
-                "openapi_operation": default_operation_for_tool(tool, operations),
-                "actions": default_actions(tool),
+                "tool_name": tool["name"],
+                "tool_description": tool["description"],
+                "openapi_operation": selected_key,
+                "actions": default_actions(tool, selected_operation),
                 "resource_access": "Private",
             }
         )
@@ -189,7 +247,7 @@ def validate_mapping_rows(
     rows: list[dict[str, Any]],
 ) -> list[str]:
     errors: list[str] = []
-    expected_names = {str(tool.get("name") or tool.get("operationId")) for tool in tools}
+    expected_names = {tool["name"] for tool in tools}
     row_names = {str(row.get("tool_name")) for row in rows}
     if len(rows) != len(tools) or row_names != expected_names:
         errors.append("tool 목록과 편집된 매핑 행이 일치하지 않습니다.")
@@ -235,7 +293,7 @@ def build_configuration(
         mappings.append(
             {
                 "tool_name": row["tool_name"],
-                "tool_endpoint": row["tool_endpoint"],
+                "tool_description": row["tool_description"],
                 "openapi_operation_key": (
                     selected_operation["key"] if selected_operation else None
                 ),
@@ -261,4 +319,3 @@ def build_configuration(
         "mappings": mappings,
         "updated_at": datetime.now(UTC).isoformat(),
     }
-
