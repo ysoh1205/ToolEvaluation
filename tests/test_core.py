@@ -76,6 +76,7 @@ class CoreTests(unittest.TestCase):
         self.assertNotEqual(rows[0]["openapi_operation"], UNMAPPED)
         self.assertEqual(rows[0]["actions"], ["Read"])
         self.assertEqual(rows[1]["actions"], ["Read"])
+        self.assertEqual(rows[0]["handled_resource"], "")
         self.assertEqual(rows[0]["resource_access"], "Private")
         self.assertEqual(rows[0]["tool_description"], "Get widget")
 
@@ -110,7 +111,7 @@ class CoreTests(unittest.TestCase):
         configuration = build_configuration(
             "generic", parsed_tools, generic_openapi, operations, rows
         )
-        self.assertEqual(configuration["schema_version"], 2)
+        self.assertEqual(configuration["schema_version"], 3)
         self.assertEqual(configuration["status"], "completed")
         self.assertEqual(
             configuration["mappings"][0]["tool_description"], "Create a widget"
@@ -175,6 +176,7 @@ class CoreTests(unittest.TestCase):
         operations = extract_operations(OPENAPI)
         rows = build_mapping_rows(TOOLS, operations)
         rows[0]["actions"] = ["Read", "Modify"]
+        rows[0]["handled_resource"] = "widget"
         configuration = build_configuration(
             "widgets", TOOLS, OPENAPI, operations, rows
         )
@@ -184,8 +186,22 @@ class CoreTests(unittest.TestCase):
         )
 
         self.assertEqual(restored[0]["actions"], ["Read", "Modify"])
+        self.assertEqual(restored[0]["handled_resource"], "widget")
         self.assertEqual(
             restored[0]["openapi_operation"], rows[0]["openapi_operation"]
+        )
+
+    def test_configuration_saves_trimmed_handled_resource(self) -> None:
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(TOOLS, operations)
+        rows[0]["handled_resource"] = "  widget page  "
+
+        configuration = build_configuration(
+            "widgets", TOOLS, OPENAPI, operations, rows
+        )
+
+        self.assertEqual(
+            configuration["mappings"][0]["handled_resource"], "widget page"
         )
 
     def test_rejects_missing_actions(self) -> None:

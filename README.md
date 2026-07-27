@@ -9,6 +9,7 @@
 - tool `name`/`description`과 OpenAPI `operationId`/`summary` 기반 자동 매핑 초안
 - tool별 OpenAPI operation 직접 선택 및 의도적 미매핑
 - `Read` / `Write` / `Modify` 복수 선택
+- tool이 다루는 리소스를 자유 텍스트로 기록
 - `Private` / `Open-public` / `target-access` 선택
 - 파일과 미완성 작업을 `draft`로 먼저 저장한 뒤 나중에 매핑 계속하기
 - 검증을 통과한 매핑을 `completed` 상태로 저장

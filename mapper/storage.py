@@ -64,6 +64,16 @@ class SupabaseRepository:
             .upsert(record, on_conflict="server_name")
             .execute()
         )
-        if not response.data:
-            raise RuntimeError("Supabase가 저장 결과를 반환하지 않았습니다.")
-        return dict(response.data[0])
+        if response.data:
+            return dict(response.data[0])
+
+        read_back = (
+            self._client.table(self.TABLE)
+            .select("*")
+            .eq("server_name", configuration["server_name"])
+            .single()
+            .execute()
+        )
+        if not read_back.data:
+            raise RuntimeError("저장 결과를 다시 확인하지 못했습니다.")
+        return dict(read_back.data)

@@ -213,6 +213,7 @@ def build_mapping_rows(
                 "tool_description": tool["description"],
                 "openapi_operation": selected_key,
                 "actions": default_actions(tool, selected_operation),
+                "handled_resource": "",
                 "resource_access": "Private",
             }
         )
@@ -241,6 +242,10 @@ def rows_from_saved_mappings(
         row["actions"] = [
             action for action in saved.get("actions", []) if action in ACTIONS
         ]
+        handled_resource = saved.get("handled_resource")
+        row["handled_resource"] = (
+            handled_resource if isinstance(handled_resource, str) else ""
+        )
         scope = saved.get("resource_access")
         row["resource_access"] = scope if scope in RESOURCE_ACCESS else "Private"
     return rows
@@ -269,6 +274,11 @@ def validate_mapping_rows(
             errors.append(f"{name}: Read / Write / Modify 중 하나 이상을 선택하세요.")
         elif isinstance(actions, list) and any(action not in ACTIONS for action in actions):
             errors.append(f"{name}: 허용되지 않은 동작 분류가 있습니다.")
+        handled_resource = row.get("handled_resource", "")
+        if not isinstance(handled_resource, str):
+            errors.append(f"{name}: 처리 리소스는 텍스트로 입력하세요.")
+        elif len(handled_resource) > 200:
+            errors.append(f"{name}: 처리 리소스는 200자 이하여야 합니다.")
         if row.get("resource_access") not in RESOURCE_ACCESS:
             errors.append(f"{name}: 리소스 공개 범위를 선택하세요.")
     return errors
@@ -321,12 +331,13 @@ def build_configuration(
                     selected_operation["path"] if selected_operation else None
                 ),
                 "actions": list(row.get("actions") or []),
+                "handled_resource": row.get("handled_resource", "").strip(),
                 "resource_access": row["resource_access"],
             }
         )
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "server_name": server_name,
         "status": status,
         "tools_json": tools,

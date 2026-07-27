@@ -144,6 +144,12 @@ def parse_editor_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     for row in rows:
         actions = row.get("actions")
         row["actions"] = list(actions) if isinstance(actions, (list, tuple)) else []
+        handled_resource = row.get("handled_resource")
+        row["handled_resource"] = (
+            ""
+            if handled_resource is None or pd.isna(handled_resource)
+            else str(handled_resource).strip()
+        )
     return rows
 
 
@@ -301,6 +307,7 @@ with mapping_tab:
             "tool_description",
             "openapi_operation",
             "actions",
+            "handled_resource",
             "resource_access",
         ],
         column_config={
@@ -323,6 +330,12 @@ with mapping_tab:
                 "동작",
                 options=list(ACTIONS),
                 required=True,
+                width="medium",
+            ),
+            "handled_resource": st.column_config.TextColumn(
+                "Handled resource",
+                help="이 tool이 처리하는 리소스를 자유롭게 입력하세요. 예: page, block",
+                max_chars=200,
                 width="medium",
             ),
             "resource_access": st.column_config.SelectboxColumn(
