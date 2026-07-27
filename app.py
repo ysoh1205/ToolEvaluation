@@ -426,28 +426,57 @@ with mapping_tab:
 with description_tab:
     st.caption(
         "Tool과 OpenAPI operation을 각각 선택해 설명을 비교할 수 있습니다. "
-        "여기서 선택한 operation은 실제 매핑을 변경하지 않습니다."
+        "method와 키워드로 operation을 좁힐 수 있으며, 여기서 선택한 값은 "
+        "실제 매핑을 변경하지 않습니다."
     )
-    selector_columns = st.columns(2, gap="large")
+    selector_columns = st.columns([1.2, 1.4, 2], gap="medium")
     with selector_columns[0]:
         selected_tool_name = st.selectbox(
             "Tool 선택",
             options=[row["tool_name"] for row in edited_rows],
             key=f"description_tool_{st.session_state.get('editor_version', 0)}",
         )
+    with selector_columns[1]:
+        description_methods = st.multiselect(
+            "Method 필터",
+            options=sorted({operation["method"] for operation in operations}),
+            key=(
+                f"description_methods_"
+                f"{st.session_state.get('editor_version', 0)}"
+            ),
+            placeholder="전체 method",
+        )
+    with selector_columns[2]:
+        description_keyword = st.text_input(
+            "키워드 검색",
+            key=(
+                f"description_keyword_"
+                f"{st.session_state.get('editor_version', 0)}"
+            ),
+            placeholder="operationId, path, summary, description",
+        )
+
     selected_row = next(
         row for row in edited_rows if row["tool_name"] == selected_tool_name
     )
+    description_operations = filter_operations(
+        operations,
+        methods=description_methods,
+        keyword=description_keyword,
+    )
+    description_operation_options = [UNMAPPED] + [
+        operation["key"] for operation in description_operations
+    ]
     default_operation_key = selected_row["openapi_operation"]
     default_operation_index = (
-        operation_options.index(default_operation_key)
-        if default_operation_key in operation_options
+        description_operation_options.index(default_operation_key)
+        if default_operation_key in description_operation_options
         else 0
     )
-    with selector_columns[1]:
+    if description_operations:
         selected_operation_key = st.selectbox(
-            "OpenAPI operation 선택",
-            options=operation_options,
+            f"OpenAPI operation 선택 · {len(description_operations)}개",
+            options=description_operation_options,
             index=default_operation_index,
             key=(
                 f"description_operation_"
@@ -455,6 +484,10 @@ with description_tab:
             ),
             help="설명 비교용 선택이며 매핑 편집 값에는 영향을 주지 않습니다.",
         )
+    else:
+        selected_operation_key = UNMAPPED
+        st.info("조건에 맞는 OpenAPI operation이 없습니다.")
+
     selected_operation = next(
         (
             operation
