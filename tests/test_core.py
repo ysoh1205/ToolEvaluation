@@ -110,6 +110,8 @@ class CoreTests(unittest.TestCase):
         configuration = build_configuration(
             "generic", parsed_tools, generic_openapi, operations, rows
         )
+        self.assertEqual(configuration["schema_version"], 2)
+        self.assertEqual(configuration["status"], "completed")
         self.assertEqual(
             configuration["mappings"][0]["tool_description"], "Create a widget"
         )
@@ -193,6 +195,37 @@ class CoreTests(unittest.TestCase):
 
         with self.assertRaises(DocumentValidationError):
             build_configuration("widgets", TOOLS, OPENAPI, operations, rows)
+
+    def test_draft_allows_incomplete_actions(self) -> None:
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(TOOLS, operations)
+        rows[0]["actions"] = []
+
+        configuration = build_configuration(
+            "widgets",
+            TOOLS,
+            OPENAPI,
+            operations,
+            rows,
+            status="draft",
+        )
+
+        self.assertEqual(configuration["status"], "draft")
+        self.assertEqual(configuration["mappings"][0]["actions"], [])
+
+    def test_rejects_unknown_configuration_status(self) -> None:
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(TOOLS, operations)
+
+        with self.assertRaises(DocumentValidationError):
+            build_configuration(
+                "widgets",
+                TOOLS,
+                OPENAPI,
+                operations,
+                rows,
+                status="unknown",
+            )
 
 
 if __name__ == "__main__":

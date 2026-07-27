@@ -10,6 +10,8 @@
 - tool별 OpenAPI operation 직접 선택 및 의도적 미매핑
 - `Read` / `Write` / `Modify` 복수 선택
 - `Private` / `Open-public` / `target-access` 선택
+- 파일과 미완성 작업을 `draft`로 먼저 저장한 뒤 나중에 매핑 계속하기
+- 검증을 통과한 매핑을 `completed` 상태로 저장
 - 서버 이름 기준 Supabase upsert, 저장 목록 불러오기
 - 전체 원본 JSON과 매핑 결과 JSON 내보내기
 
@@ -26,8 +28,8 @@ streamlit run app.py
 
 ## Supabase 설정
 
-1. Supabase SQL Editor에서
-   `supabase/migrations/20260726000000_create_tool_mapping_configs.sql`을 실행합니다.
+1. Supabase SQL Editor에서 `supabase/migrations/`의 SQL 파일을 날짜순으로 실행합니다.
+   기존 설치도 `20260727000000_add_configuration_status.sql`을 추가로 실행해야 합니다.
 2. `.streamlit/secrets.toml.example`을 `.streamlit/secrets.toml`로 복사합니다.
 3. `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY` 값을 입력합니다.
 

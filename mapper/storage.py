@@ -16,14 +16,27 @@ class SupabaseRepository:
         self._client: Client = create_client(url, service_role_key)
 
     def list_configurations(self) -> list[dict[str, Any]]:
-        response = (
-            self._client.table(self.TABLE)
-            .select("id,server_name,updated_at")
-            .order("updated_at", desc=True)
-            .limit(100)
-            .execute()
-        )
-        return list(response.data or [])
+        try:
+            response = (
+                self._client.table(self.TABLE)
+                .select("id,server_name,status,updated_at")
+                .order("updated_at", desc=True)
+                .limit(100)
+                .execute()
+            )
+            return list(response.data or [])
+        except Exception:
+            response = (
+                self._client.table(self.TABLE)
+                .select("id,server_name,updated_at")
+                .order("updated_at", desc=True)
+                .limit(100)
+                .execute()
+            )
+            configurations = list(response.data or [])
+            for configuration in configurations:
+                configuration["status"] = "completed"
+            return configurations
 
     def get_configuration(self, config_id: str) -> dict[str, Any]:
         response = (
@@ -41,6 +54,7 @@ class SupabaseRepository:
         record = {
             "schema_version": configuration["schema_version"],
             "server_name": configuration["server_name"],
+            "status": configuration["status"],
             "tools_json": configuration["tools_json"],
             "openapi_json": configuration["openapi_json"],
             "mappings": configuration["mappings"],
@@ -53,4 +67,3 @@ class SupabaseRepository:
         if not response.data:
             raise RuntimeError("Supabase가 저장 결과를 반환하지 않았습니다.")
         return dict(response.data[0])
-

@@ -9,6 +9,7 @@ from typing import Any, Iterable
 HTTP_METHODS = ("get", "post", "put", "patch", "delete", "options", "head", "trace")
 ACTIONS = ("Read", "Write", "Modify")
 RESOURCE_ACCESS = ("Private", "Open-public", "target-access")
+CONFIG_STATUSES = ("draft", "completed")
 UNMAPPED = "— 미매핑 —"
 
 
@@ -249,6 +250,7 @@ def validate_mapping_rows(
     tools: list[dict[str, Any]],
     operations: list[dict[str, str]],
     rows: list[dict[str, Any]],
+    require_actions: bool = True,
 ) -> list[str]:
     errors: list[str] = []
     expected_names = {tool["name"] for tool in tools}
@@ -263,9 +265,9 @@ def validate_mapping_rows(
         if selected != UNMAPPED and selected not in valid_operation_keys:
             errors.append(f"{name}: 존재하지 않는 OpenAPI operation입니다.")
         actions = row.get("actions")
-        if not isinstance(actions, list) or not actions:
+        if require_actions and (not isinstance(actions, list) or not actions):
             errors.append(f"{name}: Read / Write / Modify 중 하나 이상을 선택하세요.")
-        elif any(action not in ACTIONS for action in actions):
+        elif isinstance(actions, list) and any(action not in ACTIONS for action in actions):
             errors.append(f"{name}: 허용되지 않은 동작 분류가 있습니다.")
         if row.get("resource_access") not in RESOURCE_ACCESS:
             errors.append(f"{name}: 리소스 공개 범위를 선택하세요.")
@@ -278,14 +280,22 @@ def build_configuration(
     openapi_document: dict[str, Any],
     operations: list[dict[str, str]],
     rows: list[dict[str, Any]],
+    status: str = "completed",
 ) -> dict[str, Any]:
     server_name = server_name.strip()
     if not server_name:
         raise DocumentValidationError("서버 이름을 입력하세요.")
     if len(server_name) > 100:
         raise DocumentValidationError("서버 이름은 100자 이하여야 합니다.")
+    if status not in CONFIG_STATUSES:
+        raise DocumentValidationError(f"지원하지 않는 저장 상태입니다: {status}")
 
-    errors = validate_mapping_rows(tools, operations, rows)
+    errors = validate_mapping_rows(
+        tools,
+        operations,
+        rows,
+        require_actions=status == "completed",
+    )
     if errors:
         raise DocumentValidationError("\n".join(errors))
 
@@ -310,14 +320,15 @@ def build_configuration(
                 "openapi_path": (
                     selected_operation["path"] if selected_operation else None
                 ),
-                "actions": list(row["actions"]),
+                "actions": list(row.get("actions") or []),
                 "resource_access": row["resource_access"],
             }
         )
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "server_name": server_name,
+        "status": status,
         "tools_json": tools,
         "openapi_json": openapi_document,
         "mappings": mappings,

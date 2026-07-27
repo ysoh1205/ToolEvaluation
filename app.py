@@ -119,6 +119,7 @@ def set_workspace(
     tools: list[dict[str, Any]],
     openapi_document: dict[str, Any],
     mappings: list[dict[str, Any]] | None = None,
+    status: str = "draft",
 ) -> None:
     operations = extract_operations(openapi_document)
     rows = (
@@ -132,6 +133,7 @@ def set_workspace(
         "openapi": openapi_document,
         "operations": operations,
         "rows": rows,
+        "status": status,
     }
     st.session_state.pending_server_name = server_name
     st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
@@ -178,7 +180,7 @@ with st.sidebar:
             "openapi.json", type=["json"], key="openapi_file"
         )
         analyze = st.form_submit_button(
-            "파일 분석하기", type="primary", width="stretch"
+            "파일 불러오기", type="primary", width="stretch"
         )
 
     if analyze:
@@ -200,9 +202,11 @@ with st.sidebar:
             saved_configs = repo.list_configurations()
             if saved_configs:
                 labels = {
-                    f"{item['server_name']} · {str(item.get('updated_at', ''))[:10]}": item[
-                        "id"
-                    ]
+                    (
+                        f"{item['server_name']} · "
+                        f"{'초안' if item.get('status') == 'draft' else '완료'} · "
+                        f"{str(item.get('updated_at', ''))[:10]}"
+                    ): item["id"]
                     for item in saved_configs
                 }
                 selected_label = st.selectbox(
@@ -217,6 +221,7 @@ with st.sidebar:
                         saved["tools_json"],
                         saved["openapi_json"],
                         saved.get("mappings", []),
+                        saved.get("status", "completed"),
                     )
                     st.rerun()
             else:
@@ -260,7 +265,11 @@ if not workspace:
 st.divider()
 st.markdown(f"### `{server_name_input.strip() or workspace['server_name']}` 매핑")
 st.caption(
-    "자동으로 연결된 초안을 검토하세요. 미매핑을 의도적으로 선택해 저장할 수도 있습니다."
+    "파일을 먼저 초안으로 저장한 뒤 나중에 불러와 매핑을 계속할 수 있습니다. "
+    "미매핑을 의도적으로 선택해 완료 저장할 수도 있습니다."
+)
+st.caption(
+    f"현재 상태: {'초안' if workspace.get('status') == 'draft' else '완료'}"
 )
 
 rows = workspace["rows"]
@@ -402,45 +411,82 @@ with description_tab:
 errors = validate_mapping_rows(workspace["tools"], operations, edited_rows)
 unmapped_count = sum(row["openapi_operation"] == UNMAPPED for row in edited_rows)
 if errors:
-    st.error(errors[0] if len(errors) == 1 else f"{len(errors)}개 항목을 확인하세요: {errors[0]}")
+    st.warning(
+        "완료 저장 전 확인이 필요합니다: "
+        + (errors[0] if len(errors) == 1 else f"{len(errors)}개 항목 · {errors[0]}")
+    )
 elif unmapped_count:
     st.info(f"미매핑 tool {unmapped_count}개가 있습니다. 의도한 상태라면 그대로 저장할 수 있습니다.")
 
 try:
-    configuration = build_configuration(
+    draft_configuration = build_configuration(
         server_name_input,
         workspace["tools"],
         workspace["openapi"],
         operations,
         edited_rows,
+        status="draft",
     )
 except DocumentValidationError:
-    configuration = None
+    draft_configuration = None
 
-action_cols = st.columns([1.2, 1.2, 4])
+try:
+    completed_configuration = build_configuration(
+        server_name_input,
+        workspace["tools"],
+        workspace["openapi"],
+        operations,
+        edited_rows,
+        status="completed",
+    )
+except DocumentValidationError:
+    completed_configuration = None
+
+action_cols = st.columns([1.2, 1.2, 1.2, 3])
 with action_cols[0]:
-    save_clicked = st.button(
-        "Supabase에 저장",
-        type="primary",
+    save_draft_clicked = st.button(
+        "초안 저장",
         width="stretch",
-        disabled=repo is None or configuration is None,
+        disabled=repo is None or draft_configuration is None,
+        help="현재 매핑이 미완성이어도 파일과 작업 상태를 저장합니다.",
     )
 with action_cols[1]:
-    if configuration:
+    save_completed_clicked = st.button(
+        "완료 저장",
+        type="primary",
+        width="stretch",
+        disabled=repo is None or completed_configuration is None,
+        help="필수 분류가 모두 입력된 구성을 완료 상태로 저장합니다.",
+    )
+with action_cols[2]:
+    export_configuration = completed_configuration or draft_configuration
+    if export_configuration:
         st.download_button(
             "JSON 내보내기",
-            data=json.dumps(configuration, ensure_ascii=False, indent=2),
-            file_name=f"{configuration['server_name']}-tool-mapping.json",
+            data=json.dumps(export_configuration, ensure_ascii=False, indent=2),
+            file_name=(
+                f"{export_configuration['server_name']}-"
+                f"{export_configuration['status']}-tool-mapping.json"
+            ),
             mime="application/json",
             width="stretch",
         )
-with action_cols[2]:
+with action_cols[3]:
     if repo is None:
         st.caption("저장을 활성화하려면 Supabase URL과 service role key를 설정하세요.")
 
-if save_clicked and repo and configuration:
+if save_draft_clicked and repo and draft_configuration:
     try:
-        repo.save_configuration(configuration)
-        st.toast("구성을 Supabase에 저장했습니다.", icon="✅")
+        repo.save_configuration(draft_configuration)
+        workspace["status"] = "draft"
+        st.toast("파일과 현재 작업을 초안으로 저장했습니다.", icon="✅")
     except Exception:
-        st.error("저장하지 못했습니다. Supabase 테이블과 연결 설정을 확인하세요.")
+        st.error("초안을 저장하지 못했습니다. Supabase 마이그레이션과 연결 설정을 확인하세요.")
+
+if save_completed_clicked and repo and completed_configuration:
+    try:
+        repo.save_configuration(completed_configuration)
+        workspace["status"] = "completed"
+        st.toast("매핑 구성을 완료 상태로 저장했습니다.", icon="✅")
+    except Exception:
+        st.error("완료 구성을 저장하지 못했습니다. Supabase 마이그레이션과 연결 설정을 확인하세요.")
