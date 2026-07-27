@@ -89,7 +89,8 @@ def extract_operations(openapi_document: dict[str, Any]) -> list[dict[str, str]]
                     "operation_id": operation_id,
                     "method": method.upper(),
                     "path": path,
-                    "summary": str(operation.get("summary") or operation.get("description") or ""),
+                    "summary": str(operation.get("summary") or ""),
+                    "description": str(operation.get("description") or ""),
                 }
             )
 
@@ -132,8 +133,10 @@ def default_operation_for_tool(
         description_matches = [
             op
             for op in operations
-            if op["summary"]
-            and _canonical(op["summary"]) == canonical_description
+            if any(
+                value and _canonical(value) == canonical_description
+                for value in (op["summary"], op["description"])
+            )
         ]
         if len(description_matches) == 1:
             return description_matches[0]["key"]
@@ -150,6 +153,7 @@ def default_actions(
         tool["description"],
         operation["operation_id"] if operation else "",
         operation["summary"] if operation else "",
+        operation["description"] if operation else "",
     )
     read_hints = {
         "fetch",

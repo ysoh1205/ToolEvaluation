@@ -38,10 +38,18 @@ OPENAPI = {
     "openapi": "3.1.0",
     "paths": {
         "/v1/widgets/{widget_id}": {
-            "get": {"operationId": "get-widget", "summary": "Get widget"}
+            "get": {
+                "operationId": "get-widget",
+                "summary": "Get widget",
+                "description": "Returns one widget by identifier.",
+            }
         },
         "/v1/widgets/search": {
-            "post": {"operationId": "search-widgets", "summary": "Search widgets"}
+            "post": {
+                "operationId": "search-widgets",
+                "summary": "Search widgets",
+                "description": "Searches widgets matching a query.",
+            }
         },
     },
 }
@@ -56,6 +64,10 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(len(tools), 2)
         self.assertEqual(len(operations), 2)
         self.assertEqual(operations[0]["method"], "GET")
+        self.assertEqual(operations[0]["summary"], "Get widget")
+        self.assertEqual(
+            operations[0]["description"], "Returns one widget by identifier."
+        )
 
     def test_defaults_map_and_classify_tools(self) -> None:
         operations = extract_operations(OPENAPI)
@@ -101,6 +113,31 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(
             configuration["mappings"][0]["tool_description"], "Create a widget"
         )
+
+    def test_description_can_match_openapi_description(self) -> None:
+        generic_tools = [
+            {
+                "name": "document_finder",
+                "description": "Find documents visible to the caller.",
+                "inputSchema": {"type": "object", "properties": {}},
+            }
+        ]
+        generic_openapi = {
+            "openapi": "3.1.0",
+            "paths": {
+                "/v1/content/search": {
+                    "post": {
+                        "operationId": "searchContent",
+                        "summary": "Search content",
+                        "description": "Find documents visible to the caller.",
+                    }
+                }
+            },
+        }
+        operations = extract_operations(generic_openapi)
+        rows = build_mapping_rows(generic_tools, operations)
+
+        self.assertNotEqual(rows[0]["openapi_operation"], UNMAPPED)
 
     def test_unmapped_three_key_tool_infers_action_from_name(self) -> None:
         generic_tools = [

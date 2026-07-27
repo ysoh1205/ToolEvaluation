@@ -277,52 +277,105 @@ metric_cols[3].metric(
 
 operation_options = [UNMAPPED] + [operation["key"] for operation in operations]
 editor_frame = pd.DataFrame(rows)
-edited_frame = st.data_editor(
-    editor_frame,
-    key=f"mapping_editor_{st.session_state.get('editor_version', 0)}",
-    width="stretch",
-    hide_index=True,
-    num_rows="fixed",
-    height=min(800, 42 + max(1, len(rows)) * 35),
-    column_order=[
-        "tool_name",
-        "tool_description",
-        "openapi_operation",
-        "actions",
-        "resource_access",
-    ],
-    column_config={
-        "tool_name": st.column_config.TextColumn(
-            "Tool", help="tools.json의 tool 이름", disabled=True, width="medium"
+mapping_tab, description_tab = st.tabs(["매핑 편집", "설명 비교"])
+
+with mapping_tab:
+    edited_frame = st.data_editor(
+        editor_frame,
+        key=f"mapping_editor_{st.session_state.get('editor_version', 0)}",
+        width="stretch",
+        hide_index=True,
+        num_rows="fixed",
+        height=min(800, 42 + max(1, len(rows)) * 35),
+        column_order=[
+            "tool_name",
+            "tool_description",
+            "openapi_operation",
+            "actions",
+            "resource_access",
+        ],
+        column_config={
+            "tool_name": st.column_config.TextColumn(
+                "Tool", help="tools.json의 tool 이름", disabled=True, width="medium"
+            ),
+            "tool_description": st.column_config.TextColumn(
+                "Description",
+                help="tools.json의 tool 설명",
+                disabled=True,
+                width="large",
+            ),
+            "openapi_operation": st.column_config.SelectboxColumn(
+                "OpenAPI operation",
+                options=operation_options,
+                required=True,
+                width="large",
+            ),
+            "actions": st.column_config.MultiselectColumn(
+                "동작",
+                options=list(ACTIONS),
+                required=True,
+                width="medium",
+            ),
+            "resource_access": st.column_config.SelectboxColumn(
+                "Resource access",
+                options=list(RESOURCE_ACCESS),
+                required=True,
+                width="medium",
+            ),
+        },
+    )
+    edited_rows = parse_editor_rows(edited_frame)
+    workspace["rows"] = edited_rows
+
+with description_tab:
+    st.caption(
+        "tool과 현재 선택된 OpenAPI operation의 설명을 나란히 비교할 수 있습니다."
+    )
+    selected_tool_name = st.selectbox(
+        "Tool 선택",
+        options=[row["tool_name"] for row in edited_rows],
+        key=f"description_tool_{st.session_state.get('editor_version', 0)}",
+    )
+    selected_row = next(
+        row for row in edited_rows if row["tool_name"] == selected_tool_name
+    )
+    selected_operation = next(
+        (
+            operation
+            for operation in operations
+            if operation["key"] == selected_row["openapi_operation"]
         ),
-        "tool_description": st.column_config.TextColumn(
-            "Description",
-            help="tools.json의 tool 설명",
-            disabled=True,
-            width="large",
-        ),
-        "openapi_operation": st.column_config.SelectboxColumn(
-            "OpenAPI operation",
-            options=operation_options,
-            required=True,
-            width="large",
-        ),
-        "actions": st.column_config.MultiselectColumn(
-            "동작",
-            options=list(ACTIONS),
-            required=True,
-            width="medium",
-        ),
-        "resource_access": st.column_config.SelectboxColumn(
-            "Resource access",
-            options=list(RESOURCE_ACCESS),
-            required=True,
-            width="medium",
-        ),
-    },
-)
-edited_rows = parse_editor_rows(edited_frame)
-workspace["rows"] = edited_rows
+        None,
+    )
+
+    tool_column, openapi_column = st.columns(2, gap="large")
+    with tool_column:
+        st.markdown("#### Tool description")
+        with st.container(border=True):
+            st.caption(selected_row["tool_name"])
+            st.markdown(
+                selected_row["tool_description"]
+                or "_tools.json에 description이 없습니다._"
+            )
+
+    with openapi_column:
+        st.markdown("#### OpenAPI operation")
+        if selected_operation:
+            with st.container(border=True):
+                st.caption(selected_operation["key"])
+                st.markdown("**Summary**")
+                st.markdown(
+                    selected_operation.get("summary", "")
+                    or "_openapi.json에 summary가 없습니다._"
+                )
+                st.divider()
+                st.markdown("**Description**")
+                st.markdown(
+                    selected_operation.get("description", "")
+                    or "_openapi.json에 description이 없습니다._"
+                )
+        else:
+            st.info("이 tool은 아직 OpenAPI operation과 매핑되지 않았습니다.")
 
 errors = validate_mapping_rows(workspace["tools"], operations, edited_rows)
 unmapped_count = sum(row["openapi_operation"] == UNMAPPED for row in edited_rows)
