@@ -329,21 +329,41 @@ with mapping_tab:
 
 with description_tab:
     st.caption(
-        "tool과 현재 선택된 OpenAPI operation의 설명을 나란히 비교할 수 있습니다."
+        "Tool과 OpenAPI operation을 각각 선택해 설명을 비교할 수 있습니다. "
+        "여기서 선택한 operation은 실제 매핑을 변경하지 않습니다."
     )
-    selected_tool_name = st.selectbox(
-        "Tool 선택",
-        options=[row["tool_name"] for row in edited_rows],
-        key=f"description_tool_{st.session_state.get('editor_version', 0)}",
-    )
+    selector_columns = st.columns(2, gap="large")
+    with selector_columns[0]:
+        selected_tool_name = st.selectbox(
+            "Tool 선택",
+            options=[row["tool_name"] for row in edited_rows],
+            key=f"description_tool_{st.session_state.get('editor_version', 0)}",
+        )
     selected_row = next(
         row for row in edited_rows if row["tool_name"] == selected_tool_name
     )
+    default_operation_key = selected_row["openapi_operation"]
+    default_operation_index = (
+        operation_options.index(default_operation_key)
+        if default_operation_key in operation_options
+        else 0
+    )
+    with selector_columns[1]:
+        selected_operation_key = st.selectbox(
+            "OpenAPI operation 선택",
+            options=operation_options,
+            index=default_operation_index,
+            key=(
+                f"description_operation_"
+                f"{st.session_state.get('editor_version', 0)}_{selected_tool_name}"
+            ),
+            help="설명 비교용 선택이며 매핑 편집 값에는 영향을 주지 않습니다.",
+        )
     selected_operation = next(
         (
             operation
             for operation in operations
-            if operation["key"] == selected_row["openapi_operation"]
+            if operation["key"] == selected_operation_key
         ),
         None,
     )
@@ -363,19 +383,21 @@ with description_tab:
         if selected_operation:
             with st.container(border=True):
                 st.caption(selected_operation["key"])
-                st.markdown("**Summary**")
-                st.markdown(
-                    selected_operation.get("summary", "")
-                    or "_openapi.json에 summary가 없습니다._"
+                summary_tab, openapi_description_tab = st.tabs(
+                    ["Summary", "Description"]
                 )
-                st.divider()
-                st.markdown("**Description**")
-                st.markdown(
-                    selected_operation.get("description", "")
-                    or "_openapi.json에 description이 없습니다._"
-                )
+                with summary_tab:
+                    st.markdown(
+                        selected_operation.get("summary", "")
+                        or "_openapi.json에 summary가 없습니다._"
+                    )
+                with openapi_description_tab:
+                    st.markdown(
+                        selected_operation.get("description", "")
+                        or "_openapi.json에 description이 없습니다._"
+                    )
         else:
-            st.info("이 tool은 아직 OpenAPI operation과 매핑되지 않았습니다.")
+            st.info("비교할 OpenAPI operation을 선택하세요.")
 
 errors = validate_mapping_rows(workspace["tools"], operations, edited_rows)
 unmapped_count = sum(row["openapi_operation"] == UNMAPPED for row in edited_rows)
