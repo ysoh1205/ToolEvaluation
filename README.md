@@ -8,6 +8,7 @@
 - 서버 이름 + `tools.json` + `openapi.json` 입력
 - tool `name`/`description`과 OpenAPI `operationId`/`summary` 기반 자동 매핑 초안
 - tool별 OpenAPI operation 직접 선택 및 의도적 미매핑
+- HTTP method와 키워드로 OpenAPI operation 검색 후 tool에 적용
 - `Read` / `Write` / `Modify` 복수 선택
 - tool이 다루는 리소스를 자유 텍스트로 기록
 - `Private` / `Open-public` / `target-access` 선택

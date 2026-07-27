@@ -100,6 +100,36 @@ def extract_operations(openapi_document: dict[str, Any]) -> list[dict[str, str]]
     return operations
 
 
+def filter_operations(
+    operations: list[dict[str, str]],
+    methods: Iterable[str] | None = None,
+    keyword: str = "",
+) -> list[dict[str, str]]:
+    selected_methods = {method.upper() for method in methods or []}
+    search_terms = [
+        term for term in re.split(r"\s+", keyword.strip().lower()) if term
+    ]
+    filtered: list[dict[str, str]] = []
+
+    for operation in operations:
+        if selected_methods and operation["method"] not in selected_methods:
+            continue
+        searchable_text = " ".join(
+            (
+                operation["operation_id"],
+                operation["method"],
+                operation["path"],
+                operation["summary"],
+                operation["description"],
+            )
+        ).lower()
+        if search_terms and not all(term in searchable_text for term in search_terms):
+            continue
+        filtered.append(operation)
+
+    return filtered
+
+
 def _canonical(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 

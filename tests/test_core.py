@@ -9,6 +9,7 @@ from mapper.core import (
     build_configuration,
     build_mapping_rows,
     extract_operations,
+    filter_operations,
     parse_openapi_json,
     parse_tools_json,
     rows_from_saved_mappings,
@@ -67,6 +68,37 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(operations[0]["summary"], "Get widget")
         self.assertEqual(
             operations[0]["description"], "Returns one widget by identifier."
+        )
+
+    def test_filters_operations_by_method(self) -> None:
+        operations = extract_operations(OPENAPI)
+
+        filtered = filter_operations(operations, methods=["post"])
+
+        self.assertEqual([operation["method"] for operation in filtered], ["POST"])
+
+    def test_filters_operations_by_multiple_keywords(self) -> None:
+        operations = extract_operations(OPENAPI)
+
+        filtered = filter_operations(
+            operations,
+            methods=["POST"],
+            keyword="widgets query",
+        )
+
+        self.assertEqual(
+            [operation["operation_id"] for operation in filtered],
+            ["search-widgets"],
+        )
+
+    def test_operation_filter_is_case_insensitive(self) -> None:
+        operations = extract_operations(OPENAPI)
+
+        filtered = filter_operations(operations, keyword="RETURNS WIDGET")
+
+        self.assertEqual(
+            [operation["operation_id"] for operation in filtered],
+            ["get-widget"],
         )
 
     def test_defaults_map_and_classify_tools(self) -> None:

@@ -15,6 +15,7 @@ from mapper.core import (
     build_configuration,
     build_mapping_rows,
     extract_operations,
+    filter_operations,
     parse_openapi_json,
     parse_tools_json,
     rows_from_saved_mappings,
@@ -291,10 +292,83 @@ metric_cols[3].metric(
 )
 
 operation_options = [UNMAPPED] + [operation["key"] for operation in operations]
-editor_frame = pd.DataFrame(rows)
 mapping_tab, description_tab = st.tabs(["매핑 편집", "설명 비교"])
 
 with mapping_tab:
+    st.markdown("#### Operation finder")
+    st.caption(
+        "Tool을 선택하고 method와 키워드로 후보를 좁힌 뒤 매핑에 적용하세요."
+    )
+    finder_columns = st.columns([1.2, 1.4, 2], gap="medium")
+    with finder_columns[0]:
+        finder_tool_name = st.selectbox(
+            "매핑할 Tool",
+            options=[row["tool_name"] for row in rows],
+            key=f"finder_tool_{st.session_state.get('editor_version', 0)}",
+        )
+    with finder_columns[1]:
+        finder_methods = st.multiselect(
+            "Method 필터",
+            options=sorted({operation["method"] for operation in operations}),
+            key=f"finder_methods_{st.session_state.get('editor_version', 0)}",
+            placeholder="전체 method",
+        )
+    with finder_columns[2]:
+        finder_keyword = st.text_input(
+            "키워드 검색",
+            key=f"finder_keyword_{st.session_state.get('editor_version', 0)}",
+            placeholder="operationId, path, summary, description",
+        )
+
+    filtered_operations = filter_operations(
+        operations,
+        methods=finder_methods,
+        keyword=finder_keyword,
+    )
+    finder_result_columns = st.columns([4, 1], gap="medium")
+    with finder_result_columns[0]:
+        if filtered_operations:
+            filtered_operation_keys = [
+                operation["key"] for operation in filtered_operations
+            ]
+            current_finder_row = next(
+                row for row in rows if row["tool_name"] == finder_tool_name
+            )
+            current_operation_key = current_finder_row["openapi_operation"]
+            current_result_index = (
+                filtered_operation_keys.index(current_operation_key)
+                if current_operation_key in filtered_operation_keys
+                else 0
+            )
+            finder_operation_key = st.selectbox(
+                f"검색 결과 · {len(filtered_operations)}개",
+                options=filtered_operation_keys,
+                index=current_result_index,
+            )
+        else:
+            finder_operation_key = None
+            st.info("조건에 맞는 OpenAPI operation이 없습니다.")
+    with finder_result_columns[1]:
+        st.write("")
+        apply_finder_mapping = st.button(
+            "매핑에 적용",
+            type="secondary",
+            width="stretch",
+            disabled=finder_operation_key is None,
+        )
+
+    if apply_finder_mapping and finder_operation_key:
+        for row in workspace["rows"]:
+            if row["tool_name"] == finder_tool_name:
+                row["openapi_operation"] = finder_operation_key
+                break
+        st.session_state.editor_version = (
+            st.session_state.get("editor_version", 0) + 1
+        )
+        st.rerun()
+
+    st.divider()
+    editor_frame = pd.DataFrame(rows)
     edited_frame = st.data_editor(
         editor_frame,
         key=f"mapping_editor_{st.session_state.get('editor_version', 0)}",
