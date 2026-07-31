@@ -11,6 +11,7 @@ from mapper.core import (
     ACTIONS,
     RESOURCE_ACCESS,
     UNMAPPED,
+    UNKNOWN_OPERATION,
     DocumentValidationError,
     build_configuration,
     build_mapping_rows,
@@ -273,7 +274,7 @@ st.divider()
 st.markdown(f"### `{server_name_input.strip() or workspace['server_name']}` 매핑")
 st.caption(
     "파일을 먼저 초안으로 저장한 뒤 나중에 불러와 매핑을 계속할 수 있습니다. "
-    "미매핑을 의도적으로 선택해 완료 저장할 수도 있습니다."
+    "대응되는 operation이 없다면 unknown으로 설정해 완료할 수 있습니다."
 )
 st.caption(
     f"현재 상태: {'초안' if workspace.get('status') == 'draft' else '완료'}"
@@ -281,17 +282,27 @@ st.caption(
 
 rows = workspace["rows"]
 operations = workspace["operations"]
-metric_cols = st.columns(4)
+metric_cols = st.columns(5)
 metric_cols[0].metric("Tools", len(rows))
 metric_cols[1].metric("Operations", len(operations))
 metric_cols[2].metric(
-    "자동 매핑", sum(row["openapi_operation"] != UNMAPPED for row in rows)
+    "Operation 매핑",
+    sum(
+        row["openapi_operation"] not in {UNMAPPED, UNKNOWN_OPERATION}
+        for row in rows
+    ),
 )
 metric_cols[3].metric(
+    "Unknown",
+    sum(row["openapi_operation"] == UNKNOWN_OPERATION for row in rows),
+)
+metric_cols[4].metric(
     "미매핑", sum(row["openapi_operation"] == UNMAPPED for row in rows)
 )
 
-operation_options = [UNMAPPED] + [operation["key"] for operation in operations]
+operation_options = [UNMAPPED, UNKNOWN_OPERATION] + [
+    operation["key"] for operation in operations
+]
 mapping_tab, description_tab = st.tabs(["매핑 편집", "설명 비교"])
 
 with mapping_tab:
@@ -464,7 +475,7 @@ with description_tab:
         methods=description_methods,
         keyword=description_keyword,
     )
-    description_operation_options = [UNMAPPED] + [
+    description_operation_options = [UNMAPPED, UNKNOWN_OPERATION] + [
         operation["key"] for operation in description_operations
     ]
     default_operation_key = selected_row["openapi_operation"]
@@ -536,7 +547,10 @@ if errors:
         + (errors[0] if len(errors) == 1 else f"{len(errors)}개 항목 · {errors[0]}")
     )
 elif unmapped_count:
-    st.info(f"미매핑 tool {unmapped_count}개가 있습니다. 의도한 상태라면 그대로 저장할 수 있습니다.")
+    st.info(
+        f"미매핑 tool {unmapped_count}개가 있습니다. operation을 선택하거나 "
+        "대응되는 operation이 없다면 unknown으로 설정하세요."
+    )
 
 try:
     draft_configuration = build_configuration(

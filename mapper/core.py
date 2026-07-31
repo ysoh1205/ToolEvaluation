@@ -11,6 +11,7 @@ ACTIONS = ("Read", "Write", "Modify")
 RESOURCE_ACCESS = ("Private", "Open-public", "target-access")
 CONFIG_STATUSES = ("draft", "completed")
 UNMAPPED = "— 미매핑 —"
+UNKNOWN_OPERATION = "unknown"
 
 
 class DocumentValidationError(ValueError):
@@ -268,7 +269,11 @@ def rows_from_saved_mappings(
         if not saved:
             continue
         saved_key = str(saved.get("openapi_operation_key") or UNMAPPED)
-        row["openapi_operation"] = saved_key if saved_key in operation_keys else UNMAPPED
+        row["openapi_operation"] = (
+            saved_key
+            if saved_key in operation_keys or saved_key == UNKNOWN_OPERATION
+            else UNMAPPED
+        )
         row["actions"] = [
             action for action in saved.get("actions", []) if action in ACTIONS
         ]
@@ -286,6 +291,7 @@ def validate_mapping_rows(
     operations: list[dict[str, str]],
     rows: list[dict[str, Any]],
     require_actions: bool = True,
+    require_operation: bool = True,
 ) -> list[str]:
     errors: list[str] = []
     expected_names = {tool["name"] for tool in tools}
@@ -297,7 +303,14 @@ def validate_mapping_rows(
     for row in rows:
         name = str(row.get("tool_name") or "(이름 없음)")
         selected = row.get("openapi_operation")
-        if selected != UNMAPPED and selected not in valid_operation_keys:
+        if require_operation and selected == UNMAPPED:
+            errors.append(
+                f"{name}: OpenAPI operation을 선택하거나 unknown으로 설정하세요."
+            )
+        elif (
+            selected not in {UNMAPPED, UNKNOWN_OPERATION}
+            and selected not in valid_operation_keys
+        ):
             errors.append(f"{name}: 존재하지 않는 OpenAPI operation입니다.")
         actions = row.get("actions")
         if require_actions and (not isinstance(actions, list) or not actions):
@@ -335,6 +348,7 @@ def build_configuration(
         operations,
         rows,
         require_actions=status == "completed",
+        require_operation=status == "completed",
     )
     if errors:
         raise DocumentValidationError("\n".join(errors))
@@ -344,21 +358,28 @@ def build_configuration(
     for row in rows:
         selected_key = str(row["openapi_operation"])
         selected_operation = operations_by_key.get(selected_key)
+        unknown_value = (
+            UNKNOWN_OPERATION if selected_key == UNKNOWN_OPERATION else None
+        )
         mappings.append(
             {
                 "tool_name": row["tool_name"],
                 "tool_description": row["tool_description"],
                 "openapi_operation_key": (
-                    selected_operation["key"] if selected_operation else None
+                    selected_operation["key"] if selected_operation else unknown_value
                 ),
                 "openapi_operation_id": (
-                    selected_operation["operation_id"] if selected_operation else None
+                    selected_operation["operation_id"]
+                    if selected_operation
+                    else unknown_value
                 ),
                 "openapi_method": (
-                    selected_operation["method"] if selected_operation else None
+                    selected_operation["method"]
+                    if selected_operation
+                    else unknown_value
                 ),
                 "openapi_path": (
-                    selected_operation["path"] if selected_operation else None
+                    selected_operation["path"] if selected_operation else unknown_value
                 ),
                 "actions": list(row.get("actions") or []),
                 "handled_resource": row.get("handled_resource", "").strip(),

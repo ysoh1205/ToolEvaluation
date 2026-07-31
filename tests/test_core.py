@@ -6,6 +6,7 @@ import unittest
 from mapper.core import (
     DocumentValidationError,
     UNMAPPED,
+    UNKNOWN_OPERATION,
     build_configuration,
     build_mapping_rows,
     extract_operations,
@@ -192,17 +193,82 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(DocumentValidationError):
             parse_tools_json(json.dumps([{"name": "incomplete"}]))
 
-    def test_configuration_keeps_unmapped_operation(self) -> None:
+    def test_configuration_saves_unknown_operation(self) -> None:
         operations = extract_operations(OPENAPI)
         rows = build_mapping_rows(TOOLS, operations)
-        rows[1]["openapi_operation"] = UNMAPPED
+        rows[1]["openapi_operation"] = UNKNOWN_OPERATION
 
         configuration = build_configuration(
             "widgets", TOOLS, OPENAPI, operations, rows
         )
 
-        self.assertIsNone(configuration["mappings"][1]["openapi_operation_id"])
+        unknown_mapping = configuration["mappings"][1]
+        self.assertEqual(unknown_mapping["openapi_operation_key"], "unknown")
+        self.assertEqual(unknown_mapping["openapi_operation_id"], "unknown")
+        self.assertEqual(unknown_mapping["openapi_method"], "unknown")
+        self.assertEqual(unknown_mapping["openapi_path"], "unknown")
         self.assertEqual(configuration["mappings"][0]["actions"], ["Read"])
+
+    def test_restores_legacy_null_operation_as_unmapped(self) -> None:
+        operations = extract_operations(OPENAPI)
+        mappings = [
+            {
+                "tool_name": TOOLS[0]["name"],
+                "openapi_operation_key": None,
+                "actions": ["Read"],
+                "handled_resource": "",
+                "resource_access": "Private",
+            }
+        ]
+
+        restored = rows_from_saved_mappings(TOOLS, operations, mappings)
+
+        self.assertEqual(restored[0]["openapi_operation"], UNMAPPED)
+
+    def test_restores_saved_unknown_operation(self) -> None:
+        operations = extract_operations(OPENAPI)
+        mappings = [
+            {
+                "tool_name": TOOLS[0]["name"],
+                "openapi_operation_key": UNKNOWN_OPERATION,
+                "actions": ["Read"],
+                "handled_resource": "",
+                "resource_access": "Private",
+            }
+        ]
+
+        restored = rows_from_saved_mappings(TOOLS, operations, mappings)
+
+        self.assertEqual(restored[0]["openapi_operation"], UNKNOWN_OPERATION)
+
+    def test_completed_configuration_rejects_unmapped_operation(self) -> None:
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(TOOLS, operations)
+        rows[0]["openapi_operation"] = UNMAPPED
+
+        with self.assertRaisesRegex(
+            DocumentValidationError,
+            "OpenAPI operation을 선택하거나 unknown으로 설정하세요",
+        ):
+            build_configuration("widgets", TOOLS, OPENAPI, operations, rows)
+
+    def test_draft_keeps_unmapped_operation_incomplete(self) -> None:
+        operations = extract_operations(OPENAPI)
+        rows = build_mapping_rows(TOOLS, operations)
+        rows[0]["openapi_operation"] = UNMAPPED
+
+        configuration = build_configuration(
+            "widgets",
+            TOOLS,
+            OPENAPI,
+            operations,
+            rows,
+            status="draft",
+        )
+
+        self.assertIsNone(
+            configuration["mappings"][0]["openapi_operation_key"]
+        )
 
     def test_saved_mapping_round_trip(self) -> None:
         operations = extract_operations(OPENAPI)
