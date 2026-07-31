@@ -414,7 +414,7 @@ with mapping_tab:
             "actions": st.column_config.MultiselectColumn(
                 "동작",
                 options=list(ACTIONS),
-                required=True,
+                help="실제 operation을 선택한 경우 필수이며, unknown이면 비워둘 수 있습니다.",
                 width="medium",
             ),
             "handled_resource": st.column_config.TextColumn(

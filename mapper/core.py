@@ -313,7 +313,11 @@ def validate_mapping_rows(
         ):
             errors.append(f"{name}: 존재하지 않는 OpenAPI operation입니다.")
         actions = row.get("actions")
-        if require_actions and (not isinstance(actions, list) or not actions):
+        if (
+            require_actions
+            and selected != UNKNOWN_OPERATION
+            and (not isinstance(actions, list) or not actions)
+        ):
             errors.append(f"{name}: Read / Write / Modify 중 하나 이상을 선택하세요.")
         elif isinstance(actions, list) and any(action not in ACTIONS for action in actions):
             errors.append(f"{name}: 허용되지 않은 동작 분류가 있습니다.")

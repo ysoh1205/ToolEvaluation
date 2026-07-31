@@ -9,7 +9,7 @@
 - tool `name`/`description`과 OpenAPI `operationId`/`summary` 기반 자동 매핑 초안
 - tool별 OpenAPI operation 직접 선택
 - `미매핑`은 초안으로만 저장하고, 대응 operation이 없음을 확정하면 `unknown`으로
-  설정해 완료
+  설정해 동작 및 처리 리소스 입력 없이 완료
 - 매핑 편집과 설명 비교에서 HTTP method·키워드로 OpenAPI operation 검색
 - `Read` / `Write` / `Modify` 복수 선택
 - tool이 다루는 리소스를 자유 텍스트로 기록

@@ -197,6 +197,8 @@ class CoreTests(unittest.TestCase):
         operations = extract_operations(OPENAPI)
         rows = build_mapping_rows(TOOLS, operations)
         rows[1]["openapi_operation"] = UNKNOWN_OPERATION
+        rows[1]["actions"] = []
+        rows[1]["handled_resource"] = ""
 
         configuration = build_configuration(
             "widgets", TOOLS, OPENAPI, operations, rows
@@ -207,6 +209,8 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(unknown_mapping["openapi_operation_id"], "unknown")
         self.assertEqual(unknown_mapping["openapi_method"], "unknown")
         self.assertEqual(unknown_mapping["openapi_path"], "unknown")
+        self.assertEqual(unknown_mapping["actions"], [])
+        self.assertEqual(unknown_mapping["handled_resource"], "")
         self.assertEqual(configuration["mappings"][0]["actions"], ["Read"])
 
     def test_restores_legacy_null_operation_as_unmapped(self) -> None:
