@@ -12,8 +12,6 @@
   설정해 동작 및 처리 리소스 입력 없이 완료
 - 매핑 편집과 설명 비교에서 HTTP method·키워드로 OpenAPI operation 검색
 - `Read` / `Write` / `Modify` 복수 선택
-- 초안 저장 시 매핑된 method에 따라 GET → `Read`, POST → `Write`,
-  PATCH·DELETE → `Modify`로 자동 분류
 - tool이 다루는 리소스를 자유 텍스트로 기록
 - `Private` / `Open-public` / `target-access` 선택
 - 파일과 미완성 작업을 `draft`로 먼저 저장한 뒤 나중에 매핑 계속하기
