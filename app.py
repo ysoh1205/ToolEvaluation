@@ -374,6 +374,12 @@ if not workspace:
     )
     st.stop()
 
+if st.session_state.pop("draft_saved_toast", False):
+    st.toast(
+        "API method 기준으로 action을 자동 매핑해 초안으로 저장했습니다.",
+        icon="✅",
+    )
+
 st.divider()
 st.markdown(f"### `{server_name_input.strip() or workspace['server_name']}` 매핑")
 st.caption(
@@ -687,7 +693,10 @@ with action_cols[0]:
         "초안 저장",
         width="stretch",
         disabled=repo is None or draft_configuration is None,
-        help="현재 매핑이 미완성이어도 파일과 작업 상태를 저장합니다.",
+        help=(
+            "현재 매핑이 미완성이어도 저장합니다. 연결된 API method에 따라 "
+            "GET은 Read, POST는 Write, PATCH·DELETE는 Modify로 자동 매핑합니다."
+        ),
     )
 with action_cols[1]:
     save_completed_clicked = st.button(
@@ -717,10 +726,18 @@ with action_cols[3]:
 if save_draft_clicked and repo and draft_configuration:
     try:
         repo.save_configuration(draft_configuration)
-        workspace["status"] = "draft"
-        st.toast("파일과 현재 작업을 초안으로 저장했습니다.", icon="✅")
     except Exception:
         st.error("초안을 저장하지 못했습니다. Supabase 마이그레이션과 연결 설정을 확인하세요.")
+    else:
+        workspace["rows"] = rows_from_saved_mappings(
+            workspace["tools"], operations, draft_configuration["mappings"]
+        )
+        workspace["status"] = "draft"
+        st.session_state.editor_version = (
+            st.session_state.get("editor_version", 0) + 1
+        )
+        st.session_state.draft_saved_toast = True
+        st.rerun()
 
 if save_completed_clicked and repo and completed_configuration:
     try:

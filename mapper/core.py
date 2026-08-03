@@ -12,6 +12,12 @@ RESOURCE_ACCESS = ("Private", "Open-public", "target-access")
 CONFIG_STATUSES = ("draft", "completed")
 UNMAPPED = "— 미매핑 —"
 UNKNOWN_OPERATION = "unknown"
+DRAFT_ACTION_BY_METHOD = {
+    "GET": "Read",
+    "POST": "Write",
+    "PATCH": "Modify",
+    "DELETE": "Modify",
+}
 
 
 class DocumentValidationError(ValueError):
@@ -286,6 +292,29 @@ def rows_from_saved_mappings(
     return rows
 
 
+def rows_with_draft_method_actions(
+    rows: list[dict[str, Any]], operations: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Return rows with mapped operation actions normalized for draft saves."""
+    operations_by_key = {operation["key"]: operation for operation in operations}
+    normalized_rows: list[dict[str, Any]] = []
+
+    for row in rows:
+        normalized_row = dict(row)
+        current_actions = row.get("actions")
+        normalized_row["actions"] = (
+            list(current_actions) if isinstance(current_actions, list) else []
+        )
+        selected_operation = operations_by_key.get(str(row.get("openapi_operation")))
+        if selected_operation:
+            action = DRAFT_ACTION_BY_METHOD.get(selected_operation["method"].upper())
+            if action:
+                normalized_row["actions"] = [action]
+        normalized_rows.append(normalized_row)
+
+    return normalized_rows
+
+
 def validate_mapping_rows(
     tools: list[dict[str, Any]],
     operations: list[dict[str, str]],
@@ -357,9 +386,14 @@ def build_configuration(
     if errors:
         raise DocumentValidationError("\n".join(errors))
 
+    rows_to_save = (
+        rows_with_draft_method_actions(rows, operations)
+        if status == "draft"
+        else rows
+    )
     operations_by_key = {operation["key"]: operation for operation in operations}
     mappings: list[dict[str, Any]] = []
-    for row in rows:
+    for row in rows_to_save:
         selected_key = str(row["openapi_operation"])
         selected_operation = operations_by_key.get(selected_key)
         unknown_value = (

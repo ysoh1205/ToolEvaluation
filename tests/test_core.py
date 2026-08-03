@@ -314,9 +314,10 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(DocumentValidationError):
             build_configuration("widgets", TOOLS, OPENAPI, operations, rows)
 
-    def test_draft_allows_incomplete_actions(self) -> None:
+    def test_draft_allows_incomplete_actions_for_unmapped_operation(self) -> None:
         operations = extract_operations(OPENAPI)
         rows = build_mapping_rows(TOOLS, operations)
+        rows[0]["openapi_operation"] = UNMAPPED
         rows[0]["actions"] = []
 
         configuration = build_configuration(
@@ -330,6 +331,58 @@ class CoreTests(unittest.TestCase):
 
         self.assertEqual(configuration["status"], "draft")
         self.assertEqual(configuration["mappings"][0]["actions"], [])
+
+    def test_draft_maps_actions_from_mapped_http_methods(self) -> None:
+        method_cases = [
+            ("get", "Read"),
+            ("post", "Write"),
+            ("patch", "Modify"),
+            ("delete", "Modify"),
+        ]
+        tools = [
+            {
+                "name": f"{method}-widget",
+                "description": f"{method} a widget",
+                "inputSchema": {"type": "object", "properties": {}},
+            }
+            for method, _ in method_cases
+        ]
+        openapi = {
+            "openapi": "3.1.0",
+            "paths": {
+                f"/v1/widgets/{method}": {
+                    method: {"operationId": f"{method}-widget"}
+                }
+                for method, _ in method_cases
+            },
+        }
+        operations = extract_operations(openapi)
+        rows = build_mapping_rows(tools, operations)
+        for index, row in enumerate(rows):
+            row["actions"] = (
+                [] if index % 2 == 0 else ["Read", "Write", "Modify"]
+            )
+
+        configuration = build_configuration(
+            "widgets",
+            tools,
+            openapi,
+            operations,
+            rows,
+            status="draft",
+        )
+
+        self.assertEqual(
+            [mapping["actions"] for mapping in configuration["mappings"]],
+            [[expected] for _, expected in method_cases],
+        )
+        restored_rows = rows_from_saved_mappings(
+            tools, operations, configuration["mappings"]
+        )
+        self.assertEqual(
+            [row["actions"] for row in restored_rows],
+            [[expected] for _, expected in method_cases],
+        )
 
     def test_rejects_unknown_configuration_status(self) -> None:
         operations = extract_operations(OPENAPI)
