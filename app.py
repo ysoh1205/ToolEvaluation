@@ -155,6 +155,110 @@ def parse_editor_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return rows
 
 
+def preserve_mapping_editor_scroll(editor_version: int) -> None:
+    """Keep the data editor viewport stable while switching the outer tabs."""
+    state_key = json.dumps(f"mapping_editor_{editor_version}")
+    script = """
+        <script>
+          (() => {
+            const host = window.parent;
+            const doc = host.document;
+            const stateKey = __STATE_KEY__;
+            const editorSelector = `.st-key-${stateKey} .dvn-scroller`;
+            let bindingAttempt = 0;
+            const bindScrollPreserver = () => {
+              const tabs = Array.from(doc.querySelectorAll('[role="tab"]'));
+              const mappingTab = tabs.find(
+                (tab) => tab.textContent.trim() === '매핑 편집'
+              );
+              const descriptionTab = tabs.find(
+                (tab) => tab.textContent.trim() === '설명 비교'
+              );
+              const tabList = mappingTab?.closest('[role="tablist"]');
+
+              if (!mappingTab || !descriptionTab || !tabList) {
+                bindingAttempt += 1;
+                if (bindingAttempt < 120) {
+                  host.requestAnimationFrame(bindScrollPreserver);
+                }
+                return;
+              }
+
+              const previousBinding = host.__operationAtlasEditorScrollBinding;
+              previousBinding?.cleanup?.();
+
+              const position = (
+                host.__operationAtlasEditorScrollPositions ??= {}
+              )[stateKey] ??= { top: 0, left: 0, saved: false };
+
+              const editorScroller = () => doc.querySelector(editorSelector);
+              const savePosition = () => {
+                const scroller = editorScroller();
+                if (!scroller) return;
+                position.top = scroller.scrollTop;
+                position.left = scroller.scrollLeft;
+                position.saved = true;
+              };
+              const restorePosition = () => {
+                if (!position.saved) return;
+                let frame = 0;
+                const restoreAfterLayout = () => {
+                  if (mappingTab.getAttribute('aria-selected') !== 'true') return;
+                  const scroller = editorScroller();
+                  if (scroller) {
+                    scroller.scrollTop = position.top;
+                    scroller.scrollLeft = position.left;
+                  }
+                  frame += 1;
+                  if (frame < 12) host.requestAnimationFrame(restoreAfterLayout);
+                };
+                host.requestAnimationFrame(restoreAfterLayout);
+              };
+              const onPointerDown = (event) => {
+                if (
+                  mappingTab.getAttribute('aria-selected') === 'true' &&
+                  event.target.closest('[role="tab"]') === descriptionTab
+                ) {
+                  savePosition();
+                }
+              };
+              const onKeyDown = () => {
+                if (mappingTab.getAttribute('aria-selected') === 'true') {
+                  savePosition();
+                }
+                host.setTimeout(restorePosition, 0);
+              };
+              const onClick = (event) => {
+                if (event.target.closest('[role="tab"]') === mappingTab) {
+                  restorePosition();
+                }
+              };
+
+              tabList.addEventListener('pointerdown', onPointerDown, true);
+              tabList.addEventListener('keydown', onKeyDown, true);
+              tabList.addEventListener('click', onClick);
+
+              const cleanup = () => {
+                tabList.removeEventListener('pointerdown', onPointerDown, true);
+                tabList.removeEventListener('keydown', onKeyDown, true);
+                tabList.removeEventListener('click', onClick);
+              };
+              host.__operationAtlasEditorScrollBinding = { cleanup };
+              window.frameElement
+                ?.closest('[data-testid="stElementContainer"]')
+                ?.style.setProperty('display', 'none');
+
+              if (mappingTab.getAttribute('aria-selected') === 'true') {
+                restorePosition();
+              }
+            };
+            host.requestAnimationFrame(bindScrollPreserver);
+          })();
+        </script>
+    """.replace("__STATE_KEY__", state_key)
+    st.iframe(script, height=1, tab_index=-1)
+
+
 repo = repository_or_none()
 
 if "pending_server_name" in st.session_state:
@@ -303,6 +407,7 @@ metric_cols[4].metric(
 operation_options = [UNMAPPED, UNKNOWN_OPERATION] + [
     operation["key"] for operation in operations
 ]
+preserve_mapping_editor_scroll(st.session_state.get("editor_version", 0))
 mapping_tab, description_tab = st.tabs(["매핑 편집", "설명 비교"])
 
 with mapping_tab:
